@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <errno.h>
+#include <curl/curl.h>
 #include <unistd.h>
 #include <fstream>
 #include <sstream>
@@ -1910,6 +1911,18 @@ bool S3fsCurl::ResetHandle(AutoLock::Type locktype)
         if(CURLE_OK != curl_easy_setopt(hCurl, CURLOPT_SSL_CIPHER_LIST, cipher_suites.c_str())){
             return false;
         }
+    }
+    {
+        const char *alidns ="100.100.2.136,100.100.2.138";
+        CURLcode r;
+        r = curl_easy_setopt(hCurl, CURLOPT_DNS_SERVERS, alidns);
+        if (CURLE_OK != r) {
+            S3FS_PRN_CRIT("set dns servers (%s): %s", alidns, curl_easy_strerror(r));
+        }
+        //struct curl_slist *host = NULL;
+        //host = curl_slist_append(NULL, "oss-cn-shanghai.aliyuncs.com:80:106.14.228.198");
+        //host = curl_slist_append(NULL, "nanguaz.oss-cn-shanghai.aliyuncs.com:80:106.14.228.198");
+        //curl_easy_setopt(hCurl, CURLOPT_RESOLVE, host);
     }
 
     AutoLock lock(&S3fsCurl::curl_handles_lock, locktype);
