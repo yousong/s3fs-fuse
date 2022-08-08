@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <errno.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/types.h>
@@ -75,6 +76,8 @@ static bool is_mp_umask           = false;// default does not set.
 static std::string mountpoint;
 static S3fsCred* ps3fscred        = NULL; // using only in this file
 static std::string mimetype_file;
+static int mntns_fd               = -1;
+static int netns_fd               = -1;
 static bool nocopyapi             = false;
 static bool norenameapi           = false;
 static bool nonempty              = false;
@@ -4390,6 +4393,24 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
             mimetype_file = strchr(arg, '=') + sizeof(char);
             return 0;
         }
+        if(is_prefix(arg, "mntns_file=")){
+            const char *mntns_file = strchr(arg, '=') + sizeof(char);
+            mntns_fd = open(mntns_file, O_RDONLY);
+            if (mntns_fd < 0) {
+                S3FS_PRN_EXIT("mntns file cannot be opened (%s): %s", mntns_file, strerror(errno));
+                return -1;
+            }
+            return 0;
+        }
+        if(is_prefix(arg, "netns_file=")){
+            const char *netns_file = strchr(arg, '=') + sizeof(char);
+            netns_fd = open(netns_file, O_RDONLY);
+            if (netns_fd < 0) {
+                S3FS_PRN_EXIT("netns file cannot be opened (%s): %s", netns_file, strerror(errno));
+                return -1;
+            }
+            return 0;
+        }
         //
         // log file option
         //
@@ -4807,6 +4828,23 @@ int main(int argc, char* argv[])
     if(nomultipart || nocopyapi || norenameapi){
         FdEntity::SetNoMixMultipart();
         max_dirty_data = -1;
+    }
+
+    if (mntns_fd >= 0) {
+        S3FS_PRN_INFO("change mount ns");
+        if (setns(mntns_fd, CLONE_NEWNS)) {
+            S3FS_PRN_EXIT("change mount ns (%d): %s", mntns_fd, strerror(errno));
+        }
+        close(mntns_fd);
+        mntns_fd = -1;
+    }
+    if (netns_fd >= 0) {
+        S3FS_PRN_INFO("change netns ns");
+        if (setns(netns_fd, CLONE_NEWNET)) {
+            S3FS_PRN_EXIT("change netns ns (%d): %s", netns_fd, strerror(errno));
+        }
+        close(netns_fd);
+        netns_fd = -1;
     }
 
     if(!ThreadPoolMan::Initialize(max_thread_count)){
